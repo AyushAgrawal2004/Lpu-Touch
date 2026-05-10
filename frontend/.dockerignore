@@ -1,0 +1,12 @@
+# ── Node ──────────────────────────────────────
+node_modules/
+npm-debug.log*
+.npm
+
+# ── Vite build output (built inside Docker) ───
+dist/
+
+# ── Environment ───────────────────────────────
+.env
+.env.*
+!.env.example

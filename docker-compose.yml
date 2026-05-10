@@ -1,0 +1,97 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# LPU Touch — College Management System
+# Services: frontend (Nginx) · backend (Node/Express) · mongo (MongoDB)
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── MongoDB ────────────────────────────────────────────────────────────────
+  mongo:
+    image: mongo:7.0
+    container_name: lputouch_mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: college_management
+    volumes:
+      # Persist data across container restarts
+      - mongo_data:/data/db
+    # NOTE: No host port exposed — backend reaches MongoDB via internal Docker
+    # network as `mongo:27017`. Uncomment below only if you need external access
+    # and ensure local MongoDB is stopped first.
+    # ports:
+    #   - "127.0.0.1:27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - lputouch_net
+
+  # ── Backend (Node/Express API) ─────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lputouch_backend
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      # Override the local .env — points to Docker service name, not 127.0.0.1
+      NODE_ENV: production
+      PORT: 5555
+      MONGO_URI: mongodb://mongo:27017/college_management
+      JWT_SECRET: ${JWT_SECRET:-supersecretjwtkey_CHANGE_ME_in_production}
+    volumes:
+      # Mount uploads directory so files persist and are shared if scaled
+      - uploads_data:/app/uploads
+    ports:
+      # Host:Container — use 5556 on host to avoid conflict with local `npm run dev` (5555)
+      - "5556:5555"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5555/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - lputouch_net
+
+  # ── Frontend (Vite built → Nginx) ──────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Bake the backend URL into the React bundle at build time
+        VITE_API_URL: http://localhost:5555/api
+    container_name: lputouch_frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - lputouch_net
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
+volumes:
+  mongo_data:
+    driver: local
+  uploads_data:
+    driver: local
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  lputouch_net:
+    driver: bridge

@@ -1,0 +1,17 @@
+/* Reset & minimal app-level overrides */
+#root {
+  height: 100%;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* Smooth focus rings using primary color */
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  ring: 2px solid hsl(var(--ring) / 0.5);
+  border-color: hsl(var(--primary));
+}

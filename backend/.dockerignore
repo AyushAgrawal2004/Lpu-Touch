@@ -1,0 +1,16 @@
+# ── Node ──────────────────────────────────────
+node_modules/
+npm-debug.log*
+.npm
+
+# ── Environment ───────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Uploads (mounted as Docker volume) ────────
+uploads/
+
+# ── Dev tooling ───────────────────────────────
+*.test.js
+test_*.js

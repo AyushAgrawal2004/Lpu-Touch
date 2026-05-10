@@ -1,0 +1,36 @@
+# ── Node ──────────────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-error.log
+.npm
+.pnp
+.pnp.js
+
+# ── Environment / Secrets ──────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
+
+# ── Build output ───────────────────────────────────────────────────────────────
+frontend/dist/
+backend/dist/
+
+# ── Uploads (runtime files, not code) ─────────────────────────────────────────
+backend/uploads/
+
+# ── OS & Editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Test scripts (scratch files) ──────────────────────────────────────────────
+backend/test_*.js
+backend/fix_passwords.js
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+# (Dockerfiles themselves ARE committed, but not runtime volumes)
