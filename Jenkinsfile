@@ -1,261 +1,293 @@
 // ============================================================================
 // LPU Touch — Jenkins Declarative Pipeline
-// ============================================================================
-// Prerequisites on Jenkins server:
-//   • Docker + Docker Compose installed and accessible by jenkins user
-//   • Node.js 20 installed (or use nvm / NodeJS Jenkins plugin)
-//   • Credentials configured in Jenkins:
-//       - "dockerhub-credentials"  → DockerHub username/password
-//       - "lputouch-jwt-secret"    → Secret text for JWT_SECRET
-//       - "lputouch-prod-server"   → SSH key for deployment server
-//   • Environment variables (optional, override below):
-//       - DOCKERHUB_USER           → your DockerHub username
-//       - DEPLOY_HOST              → IP/hostname of production server
+// Repo: https://github.com/AyushAgrawal2004/Lpu-Touch
 // ============================================================================
 
 pipeline {
 
     agent any
 
-    // ── Configurable parameters (can be changed per-run from Jenkins UI) ──────
+    // ── Build parameters (editable from Jenkins UI on each run) ──────────────
     parameters {
         string(
-            name: 'BRANCH',
+            name: 'GIT_BRANCH',
             defaultValue: 'main',
-            description: 'Git branch to build'
+            description: 'Branch to build & deploy'
         )
         string(
             name: 'DOCKERHUB_USER',
-            defaultValue: 'yourdockerhubuser',
-            description: 'DockerHub username for pushing images'
+            defaultValue: 'ayushagrawal2004',
+            description: 'DockerHub username'
         )
         string(
             name: 'DEPLOY_HOST',
-            defaultValue: '192.168.1.100',
-            description: 'SSH host of the production server'
+            defaultValue: '0.0.0.0',
+            description: 'Production server IP or hostname'
+        )
+        string(
+            name: 'DEPLOY_USER',
+            defaultValue: 'ubuntu',
+            description: 'SSH username on production server'
         )
         booleanParam(
-            name: 'PUSH_IMAGES',
+            name: 'PUSH_TO_DOCKERHUB',
             defaultValue: true,
-            description: 'Push built images to DockerHub?'
+            description: 'Push images to DockerHub after build?'
         )
         booleanParam(
-            name: 'DEPLOY',
+            name: 'DEPLOY_TO_SERVER',
             defaultValue: true,
-            description: 'SSH into production and deploy?'
+            description: 'SSH-deploy to production server?'
         )
     }
 
-    // ── Environment variables available to all stages ─────────────────────────
+    // ── Pipeline-wide environment variables ───────────────────────────────────
     environment {
-        IMAGE_BACKEND  = "${params.DOCKERHUB_USER}/lputouch-backend"
-        IMAGE_FRONTEND = "${params.DOCKERHUB_USER}/lputouch-frontend"
-        IMAGE_TAG      = "${env.BUILD_NUMBER}"          // e.g. "42"
-        IMAGE_TAG_LATEST = "latest"
-        VITE_API_URL   = "http://${params.DEPLOY_HOST}:5555/api"
+        // Image names — built from param so no hardcoding
+        IMG_BACKEND  = "${params.DOCKERHUB_USER}/lputouch-backend"
+        IMG_FRONTEND = "${params.DOCKERHUB_USER}/lputouch-frontend"
+
+        // Each build gets a unique tag + also updates 'latest'
+        BUILD_TAG    = "build-${env.BUILD_NUMBER}"
+
+        // API URL baked into the React bundle
+        VITE_API_URL = "http://${params.DEPLOY_HOST}:5555/api"
+
+        // Credential IDs — must match what you store in Jenkins
+        CRED_DOCKER  = 'dockerhub-credentials'
+        CRED_JWT     = 'lputouch-jwt-secret'
+        CRED_SSH_KEY = 'lputouch-prod-ssh-key'
     }
 
-    // ── Global options ────────────────────────────────────────────────────────
     options {
-        timestamps()                          // prefix every log line with time
-        timeout(time: 30, unit: 'MINUTES')    // kill the build if it hangs
-        disableConcurrentBuilds()             // one build at a time
-        buildDiscarder(logRotator(
-            numToKeepStr: '10',               // keep last 10 build logs
-            artifactNumToKeepStr: '5'
-        ))
+        timestamps()
+        timeout(time: 40, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '15', artifactNumToKeepStr: '5'))
     }
 
+    // ── Trigger: poll GitHub every 5 mins OR use a webhook ───────────────────
+    triggers {
+        // Comment this out if you use a GitHub webhook instead
+        pollSCM('H/5 * * * *')
+    }
+
+    // =========================================================================
     stages {
+    // =========================================================================
 
-        // ── 1. Checkout ───────────────────────────────────────────────────────
-        stage('Checkout') {
+        // ── Stage 1: Checkout ─────────────────────────────────────────────────
+        stage('📥 Checkout') {
             steps {
-                echo "📥 Checking out branch: ${params.BRANCH}"
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: "*/${params.BRANCH}"]],
-                    userRemoteConfigs: [[url: scm.userRemoteConfigs[0].url]]
-                ])
-                sh 'echo "Commit: $(git rev-parse --short HEAD)"'
+                echo "Cloning branch: ${params.GIT_BRANCH}"
+                git(
+                    url: 'https://github.com/AyushAgrawal2004/Lpu-Touch.git',
+                    branch: params.GIT_BRANCH,
+                    credentialsId: 'github-credentials'   // optional if public repo
+                )
+                sh 'git log -1 --pretty=format:"Commit: %h | %s | %an"'
             }
         }
 
-        // ── 2. Install & Lint ─────────────────────────────────────────────────
-        stage('Install & Lint') {
+        // ── Stage 2: Install Dependencies (parallel) ──────────────────────────
+        stage('📦 Install') {
             parallel {
 
-                stage('Backend — Install') {
+                stage('Backend') {
                     steps {
                         dir('backend') {
-                            echo '📦 Installing backend dependencies…'
-                            sh 'npm ci --omit=dev'
+                            sh '''
+                                echo "Node: $(node -v) | NPM: $(npm -v)"
+                                npm ci
+                            '''
                         }
                     }
                 }
 
-                stage('Frontend — Install') {
+                stage('Frontend') {
                     steps {
                         dir('frontend') {
-                            echo '📦 Installing frontend dependencies…'
-                            sh 'npm install'
+                            sh '''
+                                echo "Node: $(node -v) | NPM: $(npm -v)"
+                                npm install
+                            '''
                         }
                     }
                 }
             }
         }
 
-        // ── 3. Tests ──────────────────────────────────────────────────────────
-        stage('Tests') {
+        // ── Stage 3: Tests & Build Verification (parallel) ────────────────────
+        stage('🧪 Test') {
             parallel {
 
-                stage('Backend — Tests') {
+                stage('Backend Tests') {
                     steps {
                         dir('backend') {
-                            echo '🧪 Running backend tests…'
-                            // Replace with your actual test command, e.g. jest
-                            sh 'npm test --if-present || echo "No test script defined — skipping"'
+                            sh 'npm test --if-present || echo "⚠️  No test script defined — skipping"'
                         }
                     }
                 }
 
-                stage('Frontend — Build Check') {
+                stage('Frontend Build Check') {
                     steps {
                         dir('frontend') {
-                            echo '🔨 Verifying frontend builds without errors…'
                             sh "VITE_API_URL=${env.VITE_API_URL} npm run build"
+                            echo '✅ Vite build successful'
                         }
                     }
                 }
             }
         }
 
-        // ── 4. Docker Build ───────────────────────────────────────────────────
-        stage('Docker Build') {
+        // ── Stage 4: Build Docker Images ──────────────────────────────────────
+        stage('🐳 Docker Build') {
             steps {
-                echo '🐳 Building Docker images…'
-                sh """
-                    docker build \
-                        -t ${env.IMAGE_BACKEND}:${env.IMAGE_TAG} \
-                        -t ${env.IMAGE_BACKEND}:${env.IMAGE_TAG_LATEST} \
-                        ./backend
+                script {
+                    echo "Building images tagged: ${env.BUILD_TAG}"
 
-                    docker build \
-                        --build-arg VITE_API_URL=${env.VITE_API_URL} \
-                        -t ${env.IMAGE_FRONTEND}:${env.IMAGE_TAG} \
-                        -t ${env.IMAGE_FRONTEND}:${env.IMAGE_TAG_LATEST} \
-                        ./frontend
-                """
-            }
-        }
-
-        // ── 5. Push to DockerHub ──────────────────────────────────────────────
-        stage('Push to DockerHub') {
-            when {
-                expression { return params.PUSH_IMAGES }
-            }
-            steps {
-                echo '🚀 Pushing images to DockerHub…'
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'dockerhub-credentials',
-                        usernameVariable: 'DOCKER_USER',
-                        passwordVariable: 'DOCKER_PASS'
-                    )
-                ]) {
-                    sh '''
-                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-
-                        docker push ''' + env.IMAGE_BACKEND  + ''':''' + env.IMAGE_TAG + '''
-                        docker push ''' + env.IMAGE_BACKEND  + ''':latest
-                        docker push ''' + env.IMAGE_FRONTEND + ''':''' + env.IMAGE_TAG + '''
-                        docker push ''' + env.IMAGE_FRONTEND + ''':latest
-
-                        docker logout
-                    '''
-                }
-            }
-        }
-
-        // ── 6. Deploy to Production ───────────────────────────────────────────
-        stage('Deploy') {
-            when {
-                expression { return params.DEPLOY }
-            }
-            steps {
-                echo "🌐 Deploying build #${env.IMAGE_TAG} to ${params.DEPLOY_HOST}…"
-                withCredentials([
-                    string(credentialsId: 'lputouch-jwt-secret', variable: 'JWT_SECRET'),
-                    sshUserPrivateKey(
-                        credentialsId: 'lputouch-prod-server',
-                        keyFileVariable: 'SSH_KEY',
-                        usernameVariable: 'SSH_USER'
-                    )
-                ]) {
+                    // Backend
                     sh """
-                        # Copy latest docker-compose to server
-                        scp -i \$SSH_KEY -o StrictHostKeyChecking=no \
-                            docker-compose.yml \
-                            \$SSH_USER@${params.DEPLOY_HOST}:/opt/lputouch/docker-compose.yml
+                        docker build \
+                            --label "git.commit=\$(git rev-parse --short HEAD)" \
+                            --label "build.number=${env.BUILD_NUMBER}" \
+                            -t ${env.IMG_BACKEND}:${env.BUILD_TAG} \
+                            -t ${env.IMG_BACKEND}:latest \
+                            ./backend
+                    """
 
-                        # SSH in, pull new images and recreate containers
-                        ssh -i \$SSH_KEY -o StrictHostKeyChecking=no \
-                            \$SSH_USER@${params.DEPLOY_HOST} << 'ENDSSH'
-                            set -e
-                            cd /opt/lputouch
-
-                            export JWT_SECRET=\${JWT_SECRET}
-                            export BACKEND_IMAGE=${env.IMAGE_BACKEND}:${env.IMAGE_TAG}
-                            export FRONTEND_IMAGE=${env.IMAGE_FRONTEND}:${env.IMAGE_TAG}
-
-                            # Pull the specific tagged images
-                            docker pull \$BACKEND_IMAGE
-                            docker pull \$FRONTEND_IMAGE
-
-                            # Update docker-compose to use pinned tags instead of build context
-                            sed -i "s|build:.*||g" docker-compose.yml
-                            # Zero-downtime: bring up with new image, remove orphans
-                            docker compose up -d --remove-orphans --no-build
-
-                            # Clean up dangling images to free disk space
-                            docker image prune -f
-ENDSSH
+                    // Frontend (bake API URL into the React bundle)
+                    sh """
+                        docker build \
+                            --build-arg VITE_API_URL=${env.VITE_API_URL} \
+                            --label "git.commit=\$(git rev-parse --short HEAD)" \
+                            --label "build.number=${env.BUILD_NUMBER}" \
+                            -t ${env.IMG_FRONTEND}:${env.BUILD_TAG} \
+                            -t ${env.IMG_FRONTEND}:latest \
+                            ./frontend
                     """
                 }
             }
         }
-    }
 
-    // ── Post actions (always run) ─────────────────────────────────────────────
+        // ── Stage 5: Push to DockerHub ────────────────────────────────────────
+        stage('🚀 Push to DockerHub') {
+            when { expression { return params.PUSH_TO_DOCKERHUB } }
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: env.CRED_DOCKER,
+                        usernameVariable: 'DH_USER',
+                        passwordVariable: 'DH_PASS'
+                    )
+                ]) {
+                    sh """
+                        echo "\$DH_PASS" | docker login -u "\$DH_USER" --password-stdin
+
+                        docker push ${env.IMG_BACKEND}:${env.BUILD_TAG}
+                        docker push ${env.IMG_BACKEND}:latest
+
+                        docker push ${env.IMG_FRONTEND}:${env.BUILD_TAG}
+                        docker push ${env.IMG_FRONTEND}:latest
+
+                        docker logout
+                        echo "✅ Images pushed successfully"
+                    """
+                }
+            }
+        }
+
+        // ── Stage 6: Deploy to Production ─────────────────────────────────────
+        stage('🌐 Deploy') {
+            when { expression { return params.DEPLOY_TO_SERVER } }
+            steps {
+                withCredentials([
+                    string(credentialsId: env.CRED_JWT, variable: 'JWT_SECRET'),
+                    sshUserPrivateKey(
+                        credentialsId: env.CRED_SSH_KEY,
+                        keyFileVariable: 'SSH_KEY'
+                    )
+                ]) {
+                    sh """
+                        # Ensure deploy directory exists on server
+                        ssh -i \$SSH_KEY \
+                            -o StrictHostKeyChecking=no \
+                            -o ConnectTimeout=15 \
+                            ${params.DEPLOY_USER}@${params.DEPLOY_HOST} \
+                            "mkdir -p /opt/lputouch"
+
+                        # Copy compose file to server
+                        scp -i \$SSH_KEY \
+                            -o StrictHostKeyChecking=no \
+                            docker-compose.yml \
+                            ${params.DEPLOY_USER}@${params.DEPLOY_HOST}:/opt/lputouch/docker-compose.yml
+
+                        # Pull latest images and restart containers
+                        ssh -i \$SSH_KEY \
+                            -o StrictHostKeyChecking=no \
+                            ${params.DEPLOY_USER}@${params.DEPLOY_HOST} << 'EOF'
+                                set -e
+                                cd /opt/lputouch
+
+                                export JWT_SECRET='${env.JWT_SECRET}'
+                                export IMG_BACKEND='${env.IMG_BACKEND}:${env.BUILD_TAG}'
+                                export IMG_FRONTEND='${env.IMG_FRONTEND}:${env.BUILD_TAG}'
+
+                                echo "📥 Pulling images..."
+                                docker pull \$IMG_BACKEND
+                                docker pull \$IMG_FRONTEND
+
+                                echo "♻️  Restarting containers..."
+                                JWT_SECRET=\$JWT_SECRET docker compose up -d --remove-orphans
+
+                                echo "🧹 Pruning old images..."
+                                docker image prune -f
+
+                                echo "✅ Deployment complete!"
+                                docker compose ps
+EOF
+                    """
+                }
+            }
+        }
+
+    // =========================================================================
+    }   // end stages
+    // =========================================================================
+
+    // ── Post-pipeline actions ─────────────────────────────────────────────────
     post {
 
         success {
             echo """
-            ✅ Pipeline SUCCESS
-            ─────────────────────────────────
-            Branch  : ${params.BRANCH}
-            Build # : ${env.BUILD_NUMBER}
-            Images  : ${env.IMAGE_BACKEND}:${env.IMAGE_TAG}
-                      ${env.IMAGE_FRONTEND}:${env.IMAGE_TAG}
-            URL     : http://${params.DEPLOY_HOST}
-            ─────────────────────────────────
+╔══════════════════════════════════════════╗
+║         ✅  PIPELINE SUCCEEDED           ║
+╠══════════════════════════════════════════╣
+║  Branch  : ${params.GIT_BRANCH}
+║  Build # : ${env.BUILD_NUMBER}
+║  Tag     : ${env.BUILD_TAG}
+║  Backend : ${env.IMG_BACKEND}:${env.BUILD_TAG}
+║  Frontend: ${env.IMG_FRONTEND}:${env.BUILD_TAG}
+║  App URL : http://${params.DEPLOY_HOST}
+╚══════════════════════════════════════════╝
             """
         }
 
         failure {
-            echo '❌ Pipeline FAILED — check the stage logs above for details.'
-            // Uncomment to send email notifications:
-            // mail to: 'your-team@example.com',
-            //      subject: "❌ LPU Touch build #${BUILD_NUMBER} failed",
-            //      body: "See: ${BUILD_URL}"
+            echo '❌ Pipeline FAILED. Check the red stage above for details.'
+            // Uncomment to email your team on failure:
+            // mail(
+            //     to: 'your-team@example.com',
+            //     subject: "❌ LPU Touch Pipeline #${BUILD_NUMBER} FAILED",
+            //     body: "Build URL: ${BUILD_URL}\nBranch: ${params.GIT_BRANCH}"
+            // )
         }
 
         always {
-            // Clean up locally built images to keep Jenkins disk usage low
-            sh '''
-                docker rmi $(docker images -q --filter "dangling=true") 2>/dev/null || true
-            '''
-            cleanWs()   // wipe Jenkins workspace after every build
+            // Remove dangling Docker images to keep disk clean
+            sh 'docker image prune -f || true'
+            // Wipe Jenkins workspace
+            cleanWs()
         }
     }
 }
