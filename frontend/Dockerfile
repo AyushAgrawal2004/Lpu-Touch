@@ -13,7 +13,7 @@ RUN npm install
 COPY . .
 
 # VITE_API_URL will be injected at build time via docker-compose build arg
-ARG VITE_API_URL=http://localhost:5555/api
+ARG VITE_API_URL=/api
 ENV VITE_API_URL=$VITE_API_URL
 
 RUN npm run build

@@ -167,7 +167,7 @@ const Files = () => {
                         <FileText className="w-5 h-5" />
                       </div>
                       <div>
-                        <a href={`http://localhost:5555${file.fileUrl}`} target="_blank" rel="noreferrer" className="font-medium text-gray-900 dark:text-white hover:text-primary transition-colors">
+                        <a href={file.fileUrl} target="_blank" rel="noreferrer" className="font-medium text-gray-900 dark:text-white hover:text-primary transition-colors">
                           {file.title}
                         </a>
                         <p className="text-sm text-gray-500 mb-1">{file.subject?.name}</p>

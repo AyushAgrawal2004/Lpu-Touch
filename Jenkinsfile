@@ -2,18 +2,20 @@ pipeline {
 
     agent any
 
-    stages {
+    environment {
+        DOCKER      = '/usr/local/bin/docker'
+        DOCKER_HOST = 'unix:///var/run/docker.sock'
+        PATH        = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${env.PATH}"
+    }
 
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
+    stages {
 
         stage('Build & Deploy') {
             steps {
-                sh 'docker compose down --remove-orphans || true'
-                sh 'docker compose up --build -d'
+                dir('/Users/ayushagrawal/Desktop/lpuTouch') {
+                    sh '${DOCKER} compose down --remove-orphans || true'
+                    sh '${DOCKER} compose up --build -d'
+                }
             }
         }
 
@@ -24,7 +26,7 @@ pipeline {
             echo '✅ App is running at http://localhost'
         }
         failure {
-            echo '❌ Build failed. Run: docker compose logs'
+            echo '❌ Build failed. Check logs with: docker compose logs'
         }
     }
 }

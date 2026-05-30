@@ -67,7 +67,7 @@ services:
       dockerfile: Dockerfile
       args:
         # Bake the backend URL into the React bundle at build time
-        VITE_API_URL: http://localhost:5555/api
+        VITE_API_URL: /api
     container_name: lputouch_frontend
     restart: unless-stopped
     depends_on:

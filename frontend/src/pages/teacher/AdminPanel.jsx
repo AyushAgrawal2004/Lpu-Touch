@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { endpoints } from '../../services/api';
+import api, { endpoints } from '../../services/api';
 import toast from 'react-hot-toast';
-import { BookPlus, Users, CalendarDays, ShieldAlert } from 'lucide-react';
+import { BookPlus, Users, ShieldAlert, UserPlus } from 'lucide-react';
 
 const AdminPanel = () => {
   const [activeTab, setActiveTab] = useState('subjects');
@@ -32,9 +32,9 @@ const AdminPanel = () => {
   }, []);
 
   const TABS = [
+    { id: 'users', label: 'Create User', icon: UserPlus },
     { id: 'subjects', label: 'Create Subject', icon: BookPlus },
-    { id: 'enrollment', label: 'Enroll Students', icon: Users },
-    { id: 'timetable', label: 'Allot Timetable', icon: CalendarDays }
+    { id: 'enrollment', label: 'Enroll Students', icon: Users }
   ];
 
   if (loading) return <div className="p-8 text-center text-gray-500">Loading Admin Panel...</div>;
@@ -73,9 +73,9 @@ const AdminPanel = () => {
       </div>
 
       <div className="bg-white dark:bg-card p-6 rounded-xl shadow-sm border border-border">
+        {activeTab === 'users' && <CreateUserTab onSuccess={fetchInitialData} />}
         {activeTab === 'subjects' && <CreateSubjectTab teachers={teachers} onSuccess={fetchInitialData} />}
         {activeTab === 'enrollment' && <EnrollStudentTab subjects={subjects} students={students} onSuccess={fetchInitialData} />}
-        {activeTab === 'timetable' && <AllotTimetableTab subjects={subjects} />}
       </div>
     </div>
   );
@@ -197,24 +197,30 @@ const EnrollStudentTab = ({ subjects, students, onSuccess }) => {
   );
 };
 
-const AllotTimetableTab = ({ subjects }) => {
-  const [formData, setFormData] = useState({ subjectId: '', dayOfWeek: 'Monday', startTime: '09:00', endTime: '10:00' });
+const CreateUserTab = ({ onSuccess }) => {
+  const [role, setRole] = useState('student');
+  const [formData, setFormData] = useState({
+    name: '', email: '', password: '', phone: '', department: '',
+    rollNumber: '', batch: '', employeeId: ''
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const res = await endpoints.admin.createTimetable(formData);
+      const payload = { ...formData, role };
+      const res = await api.post('/auth/register', payload);
       if (res.data.success) {
-        toast.success('Timetable slot allocated successfully');
-        // Reset times but keep subject/day
-        setFormData(prev => ({ ...prev, startTime: '09:00', endTime: '10:00' }));
+        toast.success(`${role.charAt(0).toUpperCase() + role.slice(1)} account created successfully`);
+        setFormData({
+          name: '', email: '', password: '', phone: '', department: '',
+          rollNumber: '', batch: '', employeeId: ''
+        });
+        onSuccess();
       }
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to allocate timetable');
+      toast.error(error.response?.data?.error || 'Failed to create user');
     } finally {
       setIsSubmitting(false);
     }
@@ -222,38 +228,74 @@ const AllotTimetableTab = ({ subjects }) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 max-w-2xl">
-      <h3 className="text-lg font-bold mb-4">Allocate Class Schedule</h3>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Select Subject</label>
-        <select required className="w-full rounded-lg border px-3 py-2 border-border bg-input"
-          value={formData.subjectId} onChange={e => setFormData({...formData, subjectId: e.target.value})}>
-          <option value="">Select a Subject</option>
-          {subjects.map(sub => (
-            <option key={sub._id} value={sub._id}>{sub.name} ({sub.code}) - {sub.teacher?.user?.name}</option>
-          ))}
-        </select>
+      <h3 className="text-lg font-bold mb-4">Create New User Account</h3>
+      
+      <div className="flex space-x-4 mb-4">
+        <label className="flex items-center space-x-2">
+          <input type="radio" value="student" checked={role === 'student'} onChange={() => setRole('student')} className="text-primary" />
+          <span>Student</span>
+        </label>
+        <label className="flex items-center space-x-2">
+          <input type="radio" value="teacher" checked={role === 'teacher'} onChange={() => setRole('teacher')} className="text-primary" />
+          <span>Teacher</span>
+        </label>
       </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Day of Week</label>
-        <select required className="w-full rounded-lg border px-3 py-2 border-border bg-input"
-          value={formData.dayOfWeek} onChange={e => setFormData({...formData, dayOfWeek: e.target.value})}>
-          {DAYS.map(day => <option key={day} value={day}>{day}</option>)}
-        </select>
-      </div>
+
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Time (24h)</label>
-          <input required type="time" className="w-full rounded-lg border px-3 py-2 border-border bg-input" 
-            value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} />
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name</label>
+          <input required type="text" className="w-full rounded-lg border px-3 py-2 border-border bg-input" 
+            value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">End Time (24h)</label>
-          <input required type="time" className="w-full rounded-lg border px-3 py-2 border-border bg-input" 
-            value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})} />
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
+          <input required type="email" className="w-full rounded-lg border px-3 py-2 border-border bg-input" 
+            value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
         </div>
       </div>
+      
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
+          <input required type="password" minLength="6" className="w-full rounded-lg border px-3 py-2 border-border bg-input" 
+            value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone</label>
+          <input required type="tel" className="w-full rounded-lg border px-3 py-2 border-border bg-input" 
+            value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Department</label>
+        <input required type="text" className="w-full rounded-lg border px-3 py-2 border-border bg-input" 
+          value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} />
+      </div>
+
+      {role === 'student' ? (
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Roll Number</label>
+            <input required type="text" className="w-full rounded-lg border px-3 py-2 border-border bg-input" 
+              value={formData.rollNumber} onChange={e => setFormData({...formData, rollNumber: e.target.value})} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Batch Year</label>
+            <input required type="text" className="w-full rounded-lg border px-3 py-2 border-border bg-input" 
+              value={formData.batch} onChange={e => setFormData({...formData, batch: e.target.value})} />
+          </div>
+        </div>
+      ) : (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Employee ID</label>
+          <input required type="text" className="w-full rounded-lg border px-3 py-2 border-border bg-input" 
+            value={formData.employeeId} onChange={e => setFormData({...formData, employeeId: e.target.value})} />
+        </div>
+      )}
+
       <button type="submit" disabled={isSubmitting} className="w-full bg-primary text-white py-2 rounded-lg hover:bg-primary/90 mt-4 disabled:opacity-50">
-        {isSubmitting ? 'Allocating...' : 'Allocate Schedule Slot'}
+        {isSubmitting ? 'Creating...' : 'Create Account'}
       </button>
     </form>
   );

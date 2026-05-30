@@ -91,7 +91,7 @@ const Files = () => {
                 </div>
                 
                 <a 
-                  href={`http://localhost:5555${file.fileUrl}`} 
+                  href={file.fileUrl} 
                   target="_blank" 
                   rel="noreferrer"
                   className="bg-gray-50 dark:bg-accent/50 p-3 text-sm font-medium text-primary hover:bg-primary hover:text-white transition-colors flex items-center justify-center border-t border-border"

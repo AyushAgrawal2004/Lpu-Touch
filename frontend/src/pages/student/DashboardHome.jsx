@@ -146,7 +146,7 @@ const DashboardHome = () => {
                 {stats.recentMaterials.map(file => (
                   <li key={file._id}>
                     <a
-                      href={`http://localhost:5555${file.fileUrl}`}
+                      href={file.fileUrl}
                       target="_blank" rel="noreferrer"
                       className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors group"
                     >
