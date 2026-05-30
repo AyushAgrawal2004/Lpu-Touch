@@ -89,8 +89,7 @@ const Login = () => {
       </div>
 
       {/* Right Panel - Login Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8"
-        style={{ background: 'hsl(220 20% 97%)' }}>
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-background">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
@@ -121,9 +120,9 @@ const Login = () => {
                 key={value}
                 type="button"
                 onClick={() => setRole(value)}
-                className="flex-1 flex flex-col items-center gap-2 py-4 rounded-2xl border-2 transition-all duration-200"
+                className={`flex-1 flex flex-col items-center gap-2 py-4 rounded-2xl border-2 transition-all duration-200 ${role !== value ? 'bg-background' : ''}`}
                 style={{
-                  background: role === value ? 'linear-gradient(135deg, hsl(243 75% 59% / 0.1), hsl(280 70% 55% / 0.07))' : 'white',
+                  background: role === value ? 'linear-gradient(135deg, hsl(243 75% 59% / 0.1), hsl(280 70% 55% / 0.07))' : undefined,
                   borderColor: role === value ? 'hsl(243 75% 59%)' : 'hsl(var(--border))',
                   boxShadow: role === value ? '0 0 0 4px hsl(243 75% 59% / 0.1)' : 'none',
                 }}
@@ -148,7 +147,7 @@ const Login = () => {
                   required
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3.5 rounded-2xl border border-border bg-white focus:outline-none focus:ring-2 focus:border-primary text-foreground text-sm transition-all"
+                  className="w-full pl-11 pr-4 py-3.5 rounded-2xl border border-border bg-background focus:outline-none focus:ring-2 focus:border-primary text-foreground text-sm transition-all"
                   style={{ '--tw-ring-color': 'hsl(243 75% 59% / 0.2)' }}
                   placeholder={role === 'student' ? 'alice@lpu.edu' : 'jane@lpu.edu'}
                 />
@@ -165,7 +164,7 @@ const Login = () => {
                   required
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3.5 rounded-2xl border border-border bg-white focus:outline-none focus:ring-2 focus:border-primary text-foreground text-sm transition-all"
+                  className="w-full pl-11 pr-4 py-3.5 rounded-2xl border border-border bg-background focus:outline-none focus:ring-2 focus:border-primary text-foreground text-sm transition-all"
                   placeholder="password123"
                 />
               </div>
